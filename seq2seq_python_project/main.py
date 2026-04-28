@@ -1,9 +1,9 @@
 import numpy as np
-from config import device
-from models import Seq2Seq, BiImputationModel
-from data_utils import generate_data_v1, generate_data_v2, generate_data_v3, generate_data_v4, generate_data_v5
-from train_utils import train_model, train_model_v5, train_model_v6_fft
-from plot_utils import plot_results, plot_results_imputation, plot_results_v5
+from reconstruction_par_IA_GAN.seq2seq_python_project.config import device
+from reconstruction_par_IA_GAN.seq2seq_python_project.models import Seq2Seq, BiImputationModel
+from reconstruction_par_IA_GAN.seq2seq_python_project.data_utils import generate_data_v1, generate_data_v2, generate_data_v3, generate_data_v4, generate_data_v5
+from reconstruction_par_IA_GAN.seq2seq_python_project.train_utils import train_model, train_model_v5, train_model_v6_fft
+from reconstruction_par_IA_GAN.seq2seq_python_project.plot_utils import plot_results, plot_results_imputation, plot_results_v5
 
 def main():
     print(f"Démarrage de la simulation sur: {device}")

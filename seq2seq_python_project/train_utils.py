@@ -1,7 +1,7 @@
 import torch
 import torch.optim as optim
 import numpy as np
-from config import device
+from reconstruction_par_IA_GAN.seq2seq_python_project.config import device
 
 def train_model(model, train_x, train_y, val_x, val_y, epochs=15, batch_size=100, lr=0.001, wd=0.0003):
     def criterion(outputs, targets):

@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from config import device
+from reconstruction_par_IA_GAN.seq2seq_python_project.config import device
 
 def plot_results(model, test_x, test_y, num_plots=4):
     model.eval()
