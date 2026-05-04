@@ -124,3 +124,73 @@ def generate_data_v5(n_samples):
         batch_mask[i, :hole, 0] = 1.0
         
     return batch_x, batch_y, batch_mask
+
+def generate_real_sensor_signals(n_signals=3, base_duration_sec=0.2):
+    fs = 100000 
+    signals = []
+    
+    for _ in range(n_signals):
+        dur = base_duration_sec * random.uniform(0.8, 1.2)
+        n_pts = int(dur * fs)
+        t = np.linspace(0, dur, n_pts)
+        
+        f_start = random.uniform(1000, 2000)
+        f_end = random.uniform(2000, 3000)
+        
+        freqs = np.linspace(f_start, f_end, n_pts)
+        phase = np.cumsum(freqs) / fs * 2 * math.pi
+        
+        sig = 0.1 * np.sin(phase) + 0.2 * (np.cos(2*phase)**3) + 0.1 * np.sin(0.5*phase)
+        trend = np.linspace(0, random.uniform(-1, 1), n_pts)
+        noise = np.random.randn(n_pts) * 0.1
+        sig = sig + trend + noise
+        
+        hole_ratio = random.uniform(0.05, 0.25)
+        is_hole = (phase % (2 * math.pi)) < (2 * math.pi * hole_ratio)
+        
+        sig_corrompu = sig.copy()
+        sig_corrompu[is_hole] = np.nan
+        signals.append((t, sig_corrompu, sig))
+        
+    return signals
+
+def build_self_supervised_dataset(signals, max_ctx=250, max_hole=70):
+    X, Y, M = [], [], []
+    for t_arr, sig_nan, _ in signals:
+        is_valid = ~np.isnan(sig_nan)
+        padded = np.concatenate(([0], is_valid.view(np.int8), [0]))
+        diffs = np.diff(padded)
+        starts = np.where(diffs == 1)[0]
+        ends = np.where(diffs == -1)[0]
+        
+        for st, en in zip(starts, ends):
+            segment_len = en - st
+            min_req = 15
+            if segment_len > min_req:
+                n_samples_from_segment = segment_len // 5
+                
+                for _ in range(max(1, n_samples_from_segment)):
+                    sim_hole_len = random.randint(3, min(max_hole, segment_len // 3))
+                    sim_hole_st = random.randint(st + 3, en - sim_hole_len - 3)
+                    
+                    ctx_l_len = min(max_ctx, sim_hole_st - st)
+                    ctx_r_len = min(max_ctx, en - (sim_hole_st + sim_hole_len))
+                    
+                    part1 = sig_nan[sim_hole_st - ctx_l_len : sim_hole_st]
+                    part2 = sig_nan[sim_hole_st : sim_hole_st + sim_hole_len]
+                    part3 = sig_nan[sim_hole_st + sim_hole_len : sim_hole_st + sim_hole_len + ctx_r_len]
+                    
+                    x_ = np.zeros((max_ctx * 2, 1))
+                    y_ = np.zeros((max_hole, 1))
+                    m_ = np.zeros((max_hole, 1))
+                    
+                    x_[max_ctx - ctx_l_len : max_ctx, 0] = part1
+                    x_[max_ctx : max_ctx + ctx_r_len, 0] = part3
+                    y_[:sim_hole_len, 0] = part2
+                    m_[:sim_hole_len, 0] = 1.0
+                    
+                    X.append(x_)
+                    Y.append(y_)
+                    M.append(m_)
+                    
+    return np.array(X), np.array(Y), np.array(M)

@@ -73,3 +73,84 @@ def plot_results_v5(model, test_x, test_y, test_mask, num_plots=4):
         plt.legend(loc='lower left')
         plt.xlim(max_ctx - 50, max_ctx + hole_len + 50)
         plt.show()
+
+def plot_results_v7(model, test_x, test_y, test_mask, max_ctx=250, num_plots=4):
+    model.eval()
+    num_samples = min(num_plots, test_x.shape[0])
+    with torch.no_grad():
+        test_x_tensor = torch.FloatTensor(test_x[:num_samples]).to(device)
+        predictions = model(test_x_tensor).cpu().numpy()
+        
+    for i in range(num_samples):
+        plt.figure(figsize=(10, 4))
+        
+        hole_len = int(np.sum(test_mask[i, :, 0]))
+        
+        plt.plot(np.arange(0, max_ctx), test_x[i, :max_ctx, 0], color='blue', alpha=0.5, label='Entrée (Gauche + Pad)')
+        
+        x_right = np.arange(max_ctx + hole_len, max_ctx + hole_len + max_ctx)
+        plt.plot(x_right, test_x[i, max_ctx:, 0], color='cyan', alpha=0.5, label='Entrée (Droite + Pad)')
+        
+        x_hole = np.arange(max_ctx, max_ctx + hole_len)
+        plt.plot(x_hole, test_y[i, :hole_len, 0], color='green', label=f'Attendu (len={hole_len})')
+        plt.plot(x_hole, predictions[i, :hole_len, 0], color='orange', linestyle='--', label='Prédiction')
+        
+        plt.title(f"Imputation Auto-supervisée (Trou={hole_len}) | Zoom ±50")
+        plt.legend(loc='lower left')
+        plt.xlim(max_ctx - 50, max_ctx + hole_len + 50)
+        plt.show()
+
+def reconstruct_and_plot_real_signal(model, time_arr, sig_nan, mean, std, max_ctx=250, max_hole=70):
+    model.eval()
+    sig_reconstructed = sig_nan.copy()
+    
+    is_nan = np.isnan(sig_nan)
+    padded = np.concatenate(([0], is_nan.view(np.int8), [0]))
+    diffs = np.diff(padded)
+    nan_starts = np.where(diffs == 1)[0]
+    nan_ends = np.where(diffs == -1)[0]
+    
+    for st, en in zip(nan_starts, nan_ends):
+        hole_len = en - st
+        if hole_len > max_hole:
+            continue
+            
+        ctx_l_st = max(0, st - max_ctx)
+        ctx_r_en = min(len(sig_nan), en + max_ctx)
+        
+        part1 = sig_reconstructed[ctx_l_st : st]
+        part3 = sig_nan[en : ctx_r_en]
+        
+        part1 = np.nan_to_num(part1, nan=np.nanmean(sig_nan)) 
+        part3 = np.nan_to_num(part3, nan=np.nanmean(sig_nan))
+        
+        ctx_l_len = len(part1)
+        ctx_r_len = len(part3)
+        
+        x_ = np.zeros((1, max_ctx * 2, 1))
+        x_[0, max_ctx - ctx_l_len : max_ctx, 0] = (part1 - mean) / std
+        x_[0, max_ctx : max_ctx + ctx_r_len, 0] = (part3 - mean) / std
+        
+        with torch.no_grad():
+            x_tensor = torch.FloatTensor(x_).to(device)
+            pred = model(x_tensor).cpu().numpy()[0, :, 0]
+            
+        pred_denorm = (pred[:hole_len] * std) + mean
+        sig_reconstructed[st:en] = pred_denorm
+
+    plt.figure(figsize=(14, 5))
+    zoom = 1000
+    
+    plt.plot(time_arr[:zoom], sig_nan[:zoom], color='blue', label='Signal Capteur Brut (Trous visibles)', linewidth=1.5)
+    
+    reconstructed_only = sig_reconstructed.copy()
+    reconstructed_only[~np.isnan(sig_nan)] = np.nan
+    
+    plt.plot(time_arr[:zoom], reconstructed_only[:zoom], color='orange', label='Reconstruction IA', linewidth=2.0)
+    
+    plt.title("Reconstruction en chaine d'un signal industriel (Zoom sur 1000 pts)")
+    plt.xlabel("Temps (s)")
+    plt.ylabel("Amplitude")
+    plt.legend(loc='lower right')
+    plt.tight_layout()
+    plt.show()

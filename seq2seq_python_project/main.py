@@ -1,9 +1,9 @@
 import numpy as np
 from reconstruction_par_IA_GAN.seq2seq_python_project.config import device
 from reconstruction_par_IA_GAN.seq2seq_python_project.models import Seq2Seq, BiImputationModel
-from reconstruction_par_IA_GAN.seq2seq_python_project.data_utils import generate_data_v1, generate_data_v2, generate_data_v3, generate_data_v4, generate_data_v5
+from reconstruction_par_IA_GAN.seq2seq_python_project.data_utils import generate_data_v1, generate_data_v2, generate_data_v3, generate_data_v4, generate_data_v5, generate_real_sensor_signals, build_self_supervised_dataset
 from reconstruction_par_IA_GAN.seq2seq_python_project.train_utils import train_model, train_model_v5, train_model_v6_fft
-from reconstruction_par_IA_GAN.seq2seq_python_project.plot_utils import plot_results, plot_results_imputation, plot_results_v5
+from reconstruction_par_IA_GAN.seq2seq_python_project.plot_utils import plot_results, plot_results_imputation, plot_results_v5, plot_results_v7, reconstruct_and_plot_real_signal
 
 def main():
     print(f"Démarrage de la simulation sur: {device}")
@@ -62,6 +62,31 @@ def main():
     model_6 = BiImputationModel(input_dim=1, hidden_dim=64, output_dim=1, hole_len=50, num_layers=2).to(device)
     train_model_v6_fft(model_6, train_x_5, train_y_5, train_m_5, val_x_5, val_y_5, val_m_5, epochs=10, batch_size=128, lr=0.001, alpha=0.5)
     plot_results_v5(model_6, val_x_5, val_y_5, val_m_5, num_plots=1)
+
+    # ------------------ Exercice 7 ------------------
+    print("\n--- Exercice 7 : Cas Pratique Hautes Fréquences avec Trous Périodiques ---")
+    sensor_signals = generate_real_sensor_signals(n_signals=15, base_duration_sec=1.0)
+    MAX_CTX_7 = 250
+    MAX_HOLE_7 = 70
+    X_7, Y_7, Mask_7 = build_self_supervised_dataset(sensor_signals, max_ctx=MAX_CTX_7, max_hole=MAX_HOLE_7)
+    
+    mean_7 = np.mean(X_7)
+    std_7 = np.std(X_7) + 1e-8
+    X_7 = (X_7 - mean_7) / std_7
+    Y_7 = (Y_7 - mean_7) / std_7
+
+    split_idx_7 = int(0.85 * len(X_7))
+    train_x_7, val_x_7 = X_7[:split_idx_7], X_7[split_idx_7:]
+    train_y_7, val_y_7 = Y_7[:split_idx_7], Y_7[split_idx_7:]
+    train_m_7, val_m_7 = Mask_7[:split_idx_7], Mask_7[split_idx_7:]
+
+    model_7 = BiImputationModel(input_dim=1, hidden_dim=96, output_dim=1, hole_len=MAX_HOLE_7, num_layers=3).to(device)
+    train_model_v6_fft(model_7, train_x_7, train_y_7, train_m_7, val_x_7, val_y_7, val_m_7, epochs=30, batch_size=128, lr=0.001, alpha=0.5)
+    
+    plot_results_v7(model_7, val_x_7, val_y_7, val_m_7, max_ctx=MAX_CTX_7, num_plots=3)
+    
+    t0, sig0_nan, sig0_vrai = sensor_signals[0]
+    reconstruct_and_plot_real_signal(model_7, t0, sig0_nan, mean=mean_7, std=std_7, max_ctx=MAX_CTX_7, max_hole=MAX_HOLE_7)
 
 if __name__ == "__main__":
     main()
